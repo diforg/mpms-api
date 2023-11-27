@@ -56,6 +56,16 @@ return [
             'throw' => false,
         ],
 
+        'lab_music' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public/mymusic'),
+        ],
+        
+        'raw_music' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public/rawmusic'),
+        ],
+        
     ],
 
     /*
