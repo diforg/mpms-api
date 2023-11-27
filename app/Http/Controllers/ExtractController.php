@@ -17,6 +17,7 @@ class ExtractController extends Controller
     private $playlist;
     private $song;
     private $track;
+    private const MUSIC_DISK = 'lab_music';
 
     public function __construct(Playlist $playlist, Song $song, Track $track)
     {
@@ -27,94 +28,106 @@ class ExtractController extends Controller
 
     /**
      * Prepara os dados do diretório com as mp3
-     *
-     * @return array
      */
+
     private function processFolder()
     {
-        
-        $dirRoot = Storage::disk('lab_music');
-        
-        $nameRoot = '';
-        $dada = []; $n = 0;
-        foreach ($dirRoot->listContents() as $dirSub) {
+        $data = [];
+        $directories = Storage::disk(self::MUSIC_DISK)->directories();
 
-            if($nameRoot <> $dirSub['basename']) {
-                $nameRoot = $dirSub['basename'];
-                $data[$n]['name'] = $dirSub['basename'];
-            }
-            $files = $dirRoot->listContents($dirSub['basename']);
-            $o = 0;
-            foreach ($files as $file) {
-                if ($file['extension'] == 'mp3') {
-
-                    $arr1 = explode(' - ', $file['filename']);
-                    list($q1,$q2) = ($arr1[0]) ? explode('] ', $arr1[0]) : ['',''];
-                    list($r1,$r2) = explode(' ', $dirSub['basename']);
-
-                    $system_name = hash_file('md5', "D:/Timeline Musics/{$file['path']}");
-                    $track = GetId3::fromDiskAndPath('lab_music', $file['path']);
-
-                    $data[$n]['tracks'][$o]['path'] = $file['path'];
-                    $data[$n]['tracks'][$o]['system_name'] = "{$system_name}.mp3";
-                    $data[$n]['tracks'][$o]['song_name'] = ($arr1[1]) ?? '';
-                    $data[$n]['tracks'][$o]['track_name'] = ($q2) ?? '';
-                    $data[$n]['tracks'][$o]['track_number'] = $n+1;
-                    $data[$n]['tracks'][$o]['track_year'] = ($r2) ?? '';
-                    $data[$n]['tracks'][$o]['song_length'] = $track->getPlaytime();
-                }
-                $o++;
-            }
-            $n++;
-
+        foreach ($directories as $directory) {
+            $data[] = $this->processDirectory($directory);
         }
 
         return $data;
+    }
 
+    private function processDirectory($directory)
+    {
+        $data = [
+            'name' => basename($directory),
+            'tracks' => [],
+        ];
+
+        $files = Storage::disk(self::MUSIC_DISK)->files($directory);
+
+        foreach ($files as $file) {
+            $this->processFile($file, $data['tracks']);
+        }
+
+        return $data;
+    }
+
+    private function processFile($filePath, &$tracks)
+    {
+        $fileInfo = pathinfo($filePath);
+
+        if ($fileInfo['extension'] === 'mp3') {
+            $track = GetId3::fromDiskAndPath(self::MUSIC_DISK, $filePath);
+            $systemName = hash_file('md5', $filePath);
+
+            $fileNameParts = explode(' - ', $fileInfo['filename']);
+            [, $songName] = $fileNameParts[0] ? explode('] ', $fileNameParts[0]) : ['', ''];
+
+            $tracks[] = [
+                'path' => $filePath,
+                'system_name' => "{$systemName}.mp3",
+                'song_name' => $songName ?? '',
+                'track_name' => $fileNameParts[1] ?? '',
+                'track_number' => count($tracks) + 1,
+                'track_year' => explode(' ', basename(dirname($filePath)))[1] ?? '',
+                'song_length' => $track->getPlaytime(),
+            ];
+        }
     }
 
     /**
      * Salva os nomes das mp3 e sua estrutura de playlists da timeline no banco de dados
-     *
-     * @return bool
      */
     private function saveData()
     {
-        
         $data = $this->processFolder();
-        $playlist = $this->playlist;
-        $song = $this->song;
-        $track = $this->track;
 
         foreach ($data as $datum) {
-            
-            $datumPlaylist = $playlist->firstOrCreate(['name' => $datum['name']]);
-            
+            $playlist = $this->saveOrUpdatePlaylist($datum['name']);
+
             foreach ($datum['tracks'] as $datumRawTrack) {
-
-                $param = [
-                    'name' => $datumRawTrack['song_name'],
-                    'length' => $datumRawTrack['song_length'],
-                    'path' => $datumRawTrack['path'],
-                    'system_name' => $datumRawTrack['system_name'],
-                ];
-                $datumSong = $song->firstOrCreate($param);
-                
-                $param = [
-                    'song_id' => $datumSong['id'],
-                    'playlist_id' => $datumPlaylist['id'],
-                    'name' => $datumRawTrack['track_name'],
-                    'track_number' => $datumRawTrack['track_number'],
-                    'year' => $datumRawTrack['track_year'],
-                ];
-                $datumTrack = $track->firstOrCreate($param);
-
+                $song = $this->saveOrUpdateSong($datumRawTrack);
+                $this->saveOrUpdateTrack($datumRawTrack, $song, $playlist);
             }
-            
         }
 
         return true;
+    }
 
+    private function saveOrUpdatePlaylist($playlistName)
+    {
+        return Playlist::firstOrCreate(['name' => $playlistName]);
+    }
+
+    private function saveOrUpdateSong($datumRawTrack)
+    {
+        $params = [
+            'name' => $datumRawTrack['song_name'],
+            'length' => $datumRawTrack['song_length'],
+            'path' => $datumRawTrack['path'],
+            'system_name' => $datumRawTrack['system_name'],
+        ];
+
+        return Song::firstOrCreate($params);
+    }
+
+    private function saveOrUpdateTrack($datumRawTrack, $song, $playlist)
+    {
+        $params = [
+            'song_id' => $song->id,
+            'playlist_id' => $playlist->id,
+            'name' => $datumRawTrack['track_name'],
+            'track_number' => $datumRawTrack['track_number'],
+            'year' => $datumRawTrack['track_year'],
+        ];
+
+        Track::firstOrCreate($params);
     }
 
     /**
@@ -125,17 +138,16 @@ class ExtractController extends Controller
      */
     public function extract()
     {
-        
         $this->saveData();
-        $song = $this->song;
+        // $songs = $this->song->all()->toArray();
 
-        $arrSongs = $song->all()->toArray();
-        foreach ($arrSongs as $theSong) {
-            if (!file_exists("C:/xampp/htdocs/shaggy-music/storage/app/public/mp3_timeline/{$theSong['system_name']}")) {
-                File::copy("D:/Timeline Musics/{$theSong['path']}","C:/xampp/htdocs/shaggy-music/storage/app/public/mp3_timeline/{$theSong['system_name']}");
-            }
-        }
-
+        // foreach ($songs as $song) {
+        //     $destinationPath = Storage::disk('raw_music').'/'.$song['system_name'];
+        //     if (!file_exists($destinationPath)) {
+        //         $sourcePath = Storage::disk('lab_music').'/'.$song['path'];
+        //         File::copy($sourcePath, $destinationPath);
+        //     }
+        // }
     }
 
     /**
@@ -150,9 +162,7 @@ class ExtractController extends Controller
         //     $track = GetId3::fromDiskAndPath('lab_music', $file['path']);
         // }
 
-
-
-        return 'ola';
+        return 'pronto';
 
     }
 
