@@ -17,7 +17,8 @@ class ExtractController extends Controller
     private $playlist;
     private $song;
     private $track;
-    private const MUSIC_DISK = 'lab_music';
+    private const SOURCE_DISK = 'lab_music';
+    private const DESTINY_DISK = 'raw_music';
 
     public function __construct(Playlist $playlist, Song $song, Track $track)
     {
@@ -29,11 +30,10 @@ class ExtractController extends Controller
     /**
      * Prepara os dados do diretório com as mp3
      */
-
     private function processFolder()
     {
         $data = [];
-        $directories = Storage::disk(self::MUSIC_DISK)->directories();
+        $directories = Storage::disk(self::SOURCE_DISK)->directories();
 
         foreach ($directories as $directory) {
             $data[] = $this->processDirectory($directory);
@@ -42,6 +42,9 @@ class ExtractController extends Controller
         return $data;
     }
 
+    /**
+     * Processa as pastas primárias (playlists)
+     */
     private function processDirectory($directory)
     {
         $data = [
@@ -49,7 +52,7 @@ class ExtractController extends Controller
             'tracks' => [],
         ];
 
-        $files = Storage::disk(self::MUSIC_DISK)->files($directory);
+        $files = Storage::disk(self::SOURCE_DISK)->files($directory);
 
         foreach ($files as $file) {
             $this->processFile($file, $data['tracks']);
@@ -58,22 +61,24 @@ class ExtractController extends Controller
         return $data;
     }
 
+    /**
+     * Processa os arquivos da pasta (tracks e songs)
+     */
     private function processFile($filePath, &$tracks)
     {
         $fileInfo = pathinfo($filePath);
 
         if ($fileInfo['extension'] === 'mp3') {
-            $track = GetId3::fromDiskAndPath(self::MUSIC_DISK, $filePath);
-            $systemName = hash_file('md5', $filePath);
+            $track = GetId3::fromDiskAndPath(self::SOURCE_DISK, $filePath);
+            $systemName = hash('md5', $filePath);
 
             $fileNameParts = explode(' - ', $fileInfo['filename']);
-            [, $songName] = $fileNameParts[0] ? explode('] ', $fileNameParts[0]) : ['', ''];
-
+            $trackName = explode(']', $fileNameParts[0]);
             $tracks[] = [
                 'path' => $filePath,
                 'system_name' => "{$systemName}.mp3",
-                'song_name' => $songName ?? '',
-                'track_name' => $fileNameParts[1] ?? '',
+                'song_name' => $fileNameParts[1] ?? '',
+                'track_name' => $trackName[1] ?? '',
                 'track_number' => count($tracks) + 1,
                 'track_year' => explode(' ', basename(dirname($filePath)))[1] ?? '',
                 'song_length' => $track->getPlaytime(),
@@ -100,11 +105,17 @@ class ExtractController extends Controller
         return true;
     }
 
+    /**
+     * Salva / Atualiza Playlists
+     */
     private function saveOrUpdatePlaylist($playlistName)
     {
         return Playlist::firstOrCreate(['name' => $playlistName]);
     }
 
+    /**
+     * Salva / Atualiza Songs
+     */
     private function saveOrUpdateSong($datumRawTrack)
     {
         $params = [
@@ -117,6 +128,9 @@ class ExtractController extends Controller
         return Song::firstOrCreate($params);
     }
 
+    /**
+     * Salva / Atualiza Tracks
+     */
     private function saveOrUpdateTrack($datumRawTrack, $song, $playlist)
     {
         $params = [
@@ -131,39 +145,19 @@ class ExtractController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * Extrai os dados do padrão de pastas e subpastas do diretório 'mymusic' e move os arquivo mp3 para as pastas
      */
     public function extract()
     {
         $this->saveData();
-        // $songs = $this->song->all()->toArray();
-
-        // foreach ($songs as $song) {
-        //     $destinationPath = Storage::disk('raw_music').'/'.$song['system_name'];
-        //     if (!file_exists($destinationPath)) {
-        //         $sourcePath = Storage::disk('lab_music').'/'.$song['path'];
-        //         File::copy($sourcePath, $destinationPath);
-        //     }
-        // }
-    }
-
-    /**
-     * Lets play :)
-     */
-    public function test() 
-    {
-
-        // $dirRoot = Storage::disk('lab_music');
-        
-        // foreach ($dirRoot->listContents() as $dirSub) {
-        //     $track = GetId3::fromDiskAndPath('lab_music', $file['path']);
-        // }
-
-        return 'pronto';
-
+        $songs = $this->song->get();
+        foreach ($songs as $song) {
+            $destinationPath = Storage::disk(self::SOURCE_DISK)->path('/').$song['system_name'];
+            if (!file_exists($destinationPath)) {
+                $sourcePath = Storage::disk(self::DESTINY_DISK)->path('/').$song['path'];
+                File::copy($sourcePath, $destinationPath);
+            }
+        }
     }
 
 }

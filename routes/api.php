@@ -24,5 +24,3 @@ Route::apiResource('/track', TrackController::class);
 Route::apiResource('/playlist', PlaylistController::class);
 
 Route::get('/extract', [ExtractController::class, 'extract']);
-
-Route::get('/test', [ExtractController::class, 'test']);
