@@ -32,4 +32,71 @@ O projeto básico consiste no seguinte modelo:
 Inicialmente irei utilizar as primeiras soluções práticas e que estão um pouco limitadas ao meu conhecimento atual.
 Porém, o objetivo é que o projeto se desenvolva e receba mais microservices. 
 Também é prevista a integração deste projeto aos serviços da AWS
-  
+
+## Instalação
+
+### GIT
+
+- Instale o GIT, caso não tenha instalado.
+- Baixe o Projeto em sua máquina `git clone...`
+
+### DOCKER
+
+- Instale o Docker, caso não tenha instalado.
+- Entre no diretório /docker
+- Crie uma cópia do arquivo `docker-compose.yml.example` e nomeie-o como `docker-compose.yml`
+- Rode o comando `docker-compose up`
+
+### LARAVEL
+
+- Crie uma cópia do arquivo `.env.example` e nomeie-o como `.env`
+- Execute a imagem docker rodando o comando `docker exec -it mpms.api /bin/bash`
+- Rode o comando `composer install`
+- Rode o comando `php artisan migrate`
+
+## Acessos
+
+### Acessar Aplicação
+
+- Pelo terminal: `docker exec -it mpms.api /bin/bash`
+- Pelo navegador: `http://localhost:8080`
+
+### Acessar banco de dados (troubleshooting)
+
+- Utilizar dados que está no `docker-compose.yml` em 'environment'
+- Confrontar estas informações com o `.env` (parâmetros do DB)
+- Se atentar que no `docker-compose.yml.example` a porta utilizada é a 33066
+
+## Endpoints
+
+### CRUD
+
+#### Songs
+
+- List All Songs `GET /api/song`
+- Get Song `GET /api/song/{id}`
+- Create Song `POST /api/song`
+- Update Song `PUT /api/song/{id}`
+- Delete Song `DELETE /api/song/{id}`
+
+#### Tracks
+
+- List All Tracks `GET /api/track`
+- Get Track `GET /api/track/{id}`
+- Create Track `POST /api/track`
+- Update Track `PUT /api/track/{id}`
+- Delete Track `DELETE /api/track/{id}`
+
+##### Playlists
+
+- List All Playlists `GET /api/playlist`
+- Get Playlist `GET /api/playlist/{id}`
+- Create Playlist `POST /api/playlist`
+- Update Playlist `PUT /api/playlist/{id}`
+- Delete Playlist `DELETE /api/playlist/{id}`
+
+### SERVICES
+
+#### Extract
+
+- Extract Data `POST /api/extract`
